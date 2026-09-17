@@ -1,0 +1,49 @@
+:root {
+  --paper: #f6f2e8;
+  --paper-line: #d9d0b8;
+  --ink: #1f2430;
+  --ink-soft: #5b6070;
+  --navy: #24344d;
+  --navy-dark: #182233;
+  --stamp-green: #3b6e58;
+  --stamp-green-bg: #e7efe9;
+  --brick: #b3402e;
+  --brick-bg: #f6e7e3;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--paper);
+  background-image: linear-gradient(var(--paper-line) 1px, transparent 1px);
+  background-size: 100% 2.1rem;
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--navy);
+}
+
+button {
+  font-family: inherit;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
