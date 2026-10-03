@@ -53,6 +53,7 @@ public class SupplierOrder {
     public Long getId() { return id; }
     public String getProductId() { return productId; }
     public String getBuyerRef() { return buyerRef; }
+    public void setBuyerRef(String buyerRef) { this.buyerRef = buyerRef; }
     public String getRequestId() { return requestId; }
     public String getPoNumber() { return poNumber; }
     public void setPoNumber(String poNumber) { this.poNumber = poNumber; }
