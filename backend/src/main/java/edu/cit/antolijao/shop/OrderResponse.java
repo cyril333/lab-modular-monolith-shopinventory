@@ -7,6 +7,7 @@ public class OrderResponse {
     private String reason;
     private List<ItemOutcome> items;
     private Integer inventory;
+    private Long orderId;
 
     public OrderResponse(String status, String reason, List<ItemOutcome> items) {
         this.status = status;
@@ -19,6 +20,8 @@ public class OrderResponse {
     public List<ItemOutcome> getItems() { return items; }
     public Integer getInventory() { return inventory; }
     public void setInventory(Integer inventory) { this.inventory = inventory; }
+    public Long getOrderId() { return orderId; }
+    public void setOrderId(Long orderId) { this.orderId = orderId; }
 
     public static class ItemOutcome {
     private String productId;

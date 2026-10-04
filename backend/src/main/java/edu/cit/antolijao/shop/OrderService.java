@@ -66,7 +66,9 @@ public class OrderService {
 
         eventPublisher.publishEvent(new OrderPlaced(confirmedOrder.getOrderId()));
 
-        return new OrderResponse("CONFIRMED", null, outcomes);
+        OrderResponse response = new OrderResponse("CONFIRMED", null, outcomes);
+        response.setOrderId(confirmedOrder.getOrderId());
+        return response;
     }
 
     @Transactional
