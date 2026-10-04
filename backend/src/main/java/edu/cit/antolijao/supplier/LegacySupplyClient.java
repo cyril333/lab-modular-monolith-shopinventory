@@ -23,6 +23,9 @@ class LegacySupplyClient {
     @Autowired
     private LegacySupplySession session;
 
+    @Autowired
+    private edu.cit.antolijao.channel.ApplicationInstance instance;
+    
     private final RestClient restClient;
 
     LegacySupplyClient() {
@@ -71,6 +74,7 @@ class LegacySupplyClient {
                     .uri(config.baseUrl + "/purchase-orders")
                     .contentType(org.springframework.http.MediaType.APPLICATION_XML)
                     .header("X-LS-Session", session.getToken())
+                    .header("X-Client-Instance", instance.getInstanceId())
                     .header("X-Request-Id", requestId)
                     .body(body)
                     .retrieve()
@@ -96,6 +100,7 @@ class LegacySupplyClient {
             String responseBody = restClient.get()
                     .uri(config.baseUrl + "/purchase-orders/" + poNumber)
                     .header("X-LS-Session", session.getToken())
+                    .header("X-Client-Instance", instance.getInstanceId())
                     .retrieve()
                     .body(String.class);
             return unmarshal(responseBody, LegacySupplyXml.PurchaseOrderStatusXml.class);
@@ -106,6 +111,7 @@ class LegacySupplyClient {
                 String responseBody = restClient.get()
                         .uri(config.baseUrl + "/purchase-orders/" + poNumber)
                         .header("X-LS-Session", session.getToken())
+                        .header("X-Client-Instance", instance.getInstanceId())
                         .retrieve()
                         .body(String.class);
                 return unmarshal(responseBody, LegacySupplyXml.PurchaseOrderStatusXml.class);
