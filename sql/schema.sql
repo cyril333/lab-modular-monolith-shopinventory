@@ -1,8 +1,11 @@
+DROP TABLE IF EXISTS tiangge_order_items;
+DROP TABLE IF EXISTS tiangge_orders;
+DROP TABLE IF EXISTS channel_cursor;
+DROP TABLE IF EXISTS supplier_orders;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS order_items;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS inventory;
-DROP TABLE IF EXISTS supplier_orders;
 
 CREATE TABLE inventory (
     product_id TEXT PRIMARY KEY,
@@ -47,3 +50,25 @@ INSERT INTO inventory (product_id, name, stock) VALUES
     ('P100', 'Wireless Mouse', 25),
     ('P200', 'Mechanical Keyboard', 10),
     ('P300', 'USB-C Hub', 0);
+
+CREATE TABLE channel_cursor (
+    id INTEGER PRIMARY KEY,
+    last_seq BIGINT NOT NULL DEFAULT 0
+);
+INSERT INTO channel_cursor (id, last_seq) VALUES (1, 0);
+
+CREATE TABLE tiangge_orders (
+    tiangge_order_id TEXT PRIMARY KEY,
+    shop_order_id BIGINT,
+    decision TEXT,
+    cancel_confirmed BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ
+);
+
+CREATE TABLE tiangge_order_items (
+    id SERIAL PRIMARY KEY,
+    tiangge_order_id TEXT NOT NULL REFERENCES tiangge_orders(tiangge_order_id),
+    product_id TEXT NOT NULL,
+    qty INTEGER NOT NULL
+);
