@@ -48,6 +48,7 @@ class InventoryServiceImpl implements InventoryService {
 
         item.setStock(item.getStock() - quantity);
         inventoryRepository.save(item);
+        eventPublisher.publishEvent(new StockChanged(productId, item.getStock()));
 
         if (item.getStock() < LOW_STOCK_THRESHOLD) {
             eventPublisher.publishEvent(new LowStock(productId, item.getStock()));
@@ -63,6 +64,7 @@ class InventoryServiceImpl implements InventoryService {
         inventoryRepository.findByProductId(productId).ifPresent(item -> {
             item.setStock(item.getStock() + quantity);
             inventoryRepository.save(item);
+            eventPublisher.publishEvent(new StockChanged(productId, item.getStock()));
         });
     }
 
