@@ -30,17 +30,19 @@ class TiangeClient {
     }
 
     private RestClient.RequestBodySpec authedPost(String path) {
-        return (RestClient.RequestBodySpec) restClient.post()
-                .uri(config.baseUrl + path)
-                .contentType(MediaType.APPLICATION_JSON)
-                .header("X-Client-Id", config.clientId)
-                .header("Authorization", "Bearer " + config.apiKey)
-                .header("X-Client-Instance", instance.getInstanceId());
+    return (RestClient.RequestBodySpec) restClient.post()
+            .uri(config.baseUrl + path)
+            .contentType(MediaType.APPLICATION_JSON)
+            .accept(MediaType.APPLICATION_JSON)
+            .header("X-Client-Id", config.clientId)
+            .header("Authorization", "Bearer " + config.apiKey)
+            .header("X-Client-Instance", instance.getInstanceId());
     }
 
     private RestClient.RequestHeadersSpec<?> authedGet(String path) {
         return restClient.get()
                 .uri(config.baseUrl + path)
+                .accept(MediaType.APPLICATION_JSON)
                 .header("X-Client-Id", config.clientId)
                 .header("Authorization", "Bearer " + config.apiKey)
                 .header("X-Client-Instance", instance.getInstanceId());
@@ -50,6 +52,7 @@ class TiangeClient {
         return (RestClient.RequestBodySpec) restClient.put()
                 .uri(config.baseUrl + path)
                 .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
                 .header("X-Client-Id", config.clientId)
                 .header("Authorization", "Bearer " + config.apiKey)
                 .header("X-Client-Instance", instance.getInstanceId());

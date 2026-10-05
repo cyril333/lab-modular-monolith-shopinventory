@@ -28,7 +28,7 @@ class TiangeFeedPoller {
         try {
             long cursor = getCursor();
             TiangeJson.FeedResponse response = client.getFeed(cursor, 20);
-            System.out.println("Polled feed at cursor=" + cursor + ", got " +
+            System.out.println("Polled feed at cursor=" + cursor + ", nextCursor=" + response.nextCursor + ", got " +
             (response.events == null ? 0 : response.events.size()) + " event(s)");
 
             if (response.events == null || response.events.isEmpty()) {
