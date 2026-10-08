@@ -2,6 +2,7 @@ package edu.cit.antolijao.inventory;
 
 import edu.cit.antolijao.supplier.SupplierOrderDelivered;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -13,6 +14,7 @@ class SupplierOrderDeliveredListener {
         this.inventoryService = inventoryService;
     }
 
+    @Order(1)
     @EventListener
     void onDelivered(SupplierOrderDelivered event) {
         inventoryService.restock(event.getProductId(), event.getUnits());

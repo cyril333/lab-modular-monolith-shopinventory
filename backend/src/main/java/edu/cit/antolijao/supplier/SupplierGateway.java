@@ -8,4 +8,5 @@ public interface SupplierGateway {
      * Returns our own domain result — never anything from LegacySupply's XML shape.
      */
     SupplierOrderResult placeReorder(String productId, int unitsNeeded, String buyerRef);
+    void queueReorder(String productId, int unitsNeeded, String buyerRef);
 }

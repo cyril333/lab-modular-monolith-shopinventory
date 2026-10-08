@@ -3,81 +3,60 @@ package edu.cit.antolijao.channel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.HashMap;
+import java.util.Map;
 
 @Component
 class TiangeFeedPoller {
 
-    @Autowired
-    private TiangeClient client;
+    @Autowired private TiangeClient client;
+    @Autowired private ChannelCursorRepository cursorRepository;
+    @Autowired private TiangeOrderDecisionHandler decisionHandler;
 
-    @Autowired
-    private ChannelCursorRepository cursorRepository;
+    private final Map<String, Integer> failures = new HashMap<>();
 
-    @Autowired
-    private TiangeOrderRepository tiangeOrderRepository;
-
-    @Autowired
-    private TiangeOrderDecisionHandler decisionHandler;
-
-    @Scheduled(fixedDelay = 5000)
-    @Scheduled(fixedDelay = 5000)
+    @Scheduled(fixedDelay = 3000)
     void pollFeed() {
-    try {
-        long cursor = getCursor();
-        TiangeJson.FeedResponse response = client.getFeed(cursor, 20);
-
-        System.out.println("Polled feed at cursor=" + cursor + ", nextCursor=" + response.nextCursor + ", got " +
-                (response.events == null ? 0 : response.events.size()) + " event(s)");
-
-        if (response.events == null || response.events.isEmpty()) {
-            return;
-        }
-
-        boolean allOk = true;
-        for (TiangeJson.FeedEvent event : response.events) {
-            try {
-                processEvent(event);
-            } catch (Exception e) {
-                allOk = false;
-                System.out.println("Event " + event.eventId + " (" + event.orderId + ") failed: " + e.getMessage());
+        try {
+            long cursor = getCursor();
+            TiangeJson.FeedResponse response = client.getFeed(cursor, 20);
+            if (response == null || response.events == null || response.events.isEmpty()) {
+                return;
             }
-        }
+            System.out.println("Polled feed at cursor=" + cursor + ", got " + response.events.size() + " event(s)");
 
-        if (allOk) {
+            for (TiangeJson.FeedEvent event : response.events) {
+                try {
+                    processEvent(event);
+                } catch (Exception e) {
+                    int n = failures.merge(String.valueOf(event.eventId), 1, Integer::sum);
+                    System.out.println("Event " + event.eventId + " (" + event.orderId + ") failed locally (" + n + "): " + e.getMessage());
+                    if (n < 5) {
+                        return; // retried on the next poll; cursor stays before this event
+                    }
+                    System.out.println("Skipping poisoned event " + event.eventId);
+                }
+                saveCursor(event.seq); // local work is committed, so the cursor can move
+            }
             saveCursor(response.nextCursor);
+        } catch (Exception e) {
+            System.out.println("Feed poll failed: " + e.getMessage());
         }
-
-    } catch (Exception e) {
-        System.out.println("Feed poll failed: " + e.getMessage());
-    }
     }
 
     private void processEvent(TiangeJson.FeedEvent event) {
-        if ("ORDER_PLACED".equals(event.type)) {
-            handleOrderPlaced(event);
-        } else if ("ORDER_CANCELLED".equals(event.type)) {
-            decisionHandler.handleCancellation(event);
+        synchronized (TiangeOrderDecisionHandler.LOCK) {
+            if ("ORDER_PLACED".equals(event.type)) {
+                decisionHandler.handleNewOrder(event);
+            } else if ("ORDER_CANCELLED".equals(event.type)) {
+                decisionHandler.handleCancellation(event);
+            }
         }
-    }
-
-    @Transactional
-    void handleOrderPlaced(TiangeJson.FeedEvent event) {
-        // Dedup by Tiangge's orderId (stable across redelivery), not eventId.
-        Optional<TiangeOrder> existing = tiangeOrderRepository.findById(event.orderId);
-        if (existing.isPresent()) {
-            return; // already processed this order, ignore redelivery
-        }
-        decisionHandler.handleNewOrder(event);
     }
 
     private long getCursor() {
-        return cursorRepository.findById(1)
-                .map(ChannelCursor::getLastSeq)
-                .orElse(0L);
+        return cursorRepository.findById(1).map(ChannelCursor::getLastSeq).orElse(0L);
     }
 
     private void saveCursor(long newSeq) {

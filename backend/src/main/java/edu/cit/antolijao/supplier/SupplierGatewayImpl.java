@@ -53,6 +53,20 @@ class SupplierGatewayImpl implements SupplierGateway {
         return attemptSend(order, mapping, cases);
     }
 
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void queueReorder(String productId, int unitsNeeded, String buyerRef) {
+        if (supplierOrderRepository.findByBuyerRef(buyerRef).isPresent()) {
+            return; // already queued or sent
+        }
+        ProductSupplierMapping.Mapping mapping = productSupplierMapping.forProduct(productId);
+        int cases = (int) Math.ceil((double) unitsNeeded / mapping.packSize());
+        SupplierOrder order = new SupplierOrder(productId, buyerRef, UUID.randomUUID().toString(),
+                unitsNeeded, SupplierOrderStatus.PENDING);
+        order.setCases(cases);
+        supplierOrderRepository.save(order);
+    }
+    
     SupplierOrderResult attemptSend(SupplierOrder order, ProductSupplierMapping.Mapping mapping, int cases) {
         int attempt = 0;
         long backoffMillis = 500;
@@ -80,7 +94,15 @@ class SupplierGatewayImpl implements SupplierGateway {
                 }
                 sleepQuietly(backoffMillis);
                 backoffMillis *= 2;
-            }
+            } catch (RuntimeException e) {
+        // timeouts, bad content type, connection resets: outcome unknown, safe to resend with the same X-Request-Id
+                System.out.println("LegacySupply call error: " + e.getMessage());
+                if (attempt >= MAX_ATTEMPTS) {
+                    return SupplierOrderResult.pending("LegacySupply unreachable, queued for retry");
+                }
+                sleepQuietly(backoffMillis);
+                backoffMillis *= 2;
+    }
         }
 
         return SupplierOrderResult.pending("Exhausted retries, queued for later");

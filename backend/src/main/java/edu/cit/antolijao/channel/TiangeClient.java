@@ -25,7 +25,7 @@ class TiangeClient {
     TiangeClient() {
         var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
         factory.setConnectTimeout((int) Duration.ofSeconds(3).toMillis());
-        factory.setReadTimeout((int) Duration.ofSeconds(3).toMillis());
+        factory.setReadTimeout((int) Duration.ofSeconds(6).toMillis());
         this.restClient = RestClient.builder().requestFactory(factory).build();
     }
 

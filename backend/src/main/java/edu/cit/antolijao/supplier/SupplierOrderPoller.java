@@ -31,7 +31,7 @@ class SupplierOrderPoller {
             if (order.getPoNumber() == null) continue; // never got a PO number, skip
             try {
                 LegacySupplyXml.PurchaseOrderStatusXml statusXml = client.getOrderStatus(order.getPoNumber());
-                SupplierOrderStatus mapped = mapStatusCode(statusXml.statusCode);
+                SupplierOrderStatus mapped = mapStatusCode(statusXml.statusCode, order.getStatus());
                 order.setStatus(mapped);
                 repository.save(order);
 
@@ -39,18 +39,19 @@ class SupplierOrderPoller {
                     publisher.publishEvent(new SupplierOrderDelivered(
                             order.getProductId(), order.getUnits(), order.getPoNumber()));
                 }
-            } catch (LegacySupplyException e) {
+            } catch (Exception e) {
+                System.out.println("Supplier job error (PO " + order.getPoNumber() + "): " + e.getMessage());
             }
         }
     }
 
-    private SupplierOrderStatus mapStatusCode(int code) {
+    private SupplierOrderStatus mapStatusCode(int code, SupplierOrderStatus current) {
         return switch (code) {
             case 10 -> SupplierOrderStatus.ACCEPTED;
             case 20 -> SupplierOrderStatus.PICKING;
             case 30 -> SupplierOrderStatus.SHIPPED;
             case 40 -> SupplierOrderStatus.DELIVERED;
-            default -> SupplierOrderStatus.ACCEPTED; // unknown code: log + leave unchanged, document in INTEGRATION.md
+            default -> current; // unknown code: leave unchanged
         };
     }
 }

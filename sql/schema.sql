@@ -72,3 +72,11 @@ CREATE TABLE tiangge_order_items (
     product_id TEXT NOT NULL,
     qty INTEGER NOT NULL
 );
+
+ALTER TABLE tiangge_orders
+  ADD COLUMN IF NOT EXISTS decision_sent BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS resolution TEXT,
+  ADD COLUMN IF NOT EXISTS resolution_sent BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT false;
+
+UPDATE tiangge_orders SET decision_sent = true;

@@ -69,10 +69,14 @@ class InventoryServiceImpl implements InventoryService {
     }
 
     private void triggerAutoReorder(String productId) {
+    try {
         long sequence = supplierOrderRepository.count() + 1;
         String buyerRef = "RO-" + sequence;
-        SupplierOrderResult result = supplierGateway.placeReorder(productId, REORDER_QUANTITY, buyerRef);
+        supplierGateway.queueReorder(productId, REORDER_QUANTITY, buyerRef);
         // Result is intentionally not surfaced here — SupplierOrder table + notifications
         // (added in Part E) are the system of record for what happened.
+    } catch (Exception e) {
+        System.out.println("Auto-reorder failed, retry job will cover it: " + e.getMessage());
     }
+}
 }
