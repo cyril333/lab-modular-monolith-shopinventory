@@ -6,6 +6,7 @@ import edu.cit.antolijao.shop.OrderService;
 import edu.cit.antolijao.supplier.SupplierGateway;
 import edu.cit.antolijao.supplier.SupplierOrderRepository;
 import edu.cit.antolijao.supplier.SupplierOrderStatus;
+import edu.cit.antolijao.inventory.InventoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +36,9 @@ class TiangeOrderDecisionHandler {
     @Autowired
     private SupplierOrderRepository supplierOrderRepository;
 
+    @Autowired
+    private InventoryService inventoryService;
+
     @Transactional
     void handleNewOrder(TiangeJson.FeedEvent event) {
         TiangeOrder record = new TiangeOrder(event.orderId);
@@ -55,60 +59,62 @@ class TiangeOrderDecisionHandler {
         request.setItems(items);
 
         OrderResponse response = orderService.placeOrder(request);
+        String shopOrderId = findShopOrderId(response);
 
         if ("CONFIRMED".equals(response.getStatus())) {
-            accept(event.orderId, record, findShopOrderId(response));
+            accept(event.orderId, record, shopOrderId);
             return;
         }
 
-        // REJECTED: check if every short item already has an open supplier order coming.
-        if (canBackorder(event.lines)) {
-            backorder(event.orderId, record);
+        if (canBackorder(event.orderId, event.lines)) {
+            backorder(event.orderId, record, shopOrderId);
         } else {
-            reject(event.orderId, record, "Insufficient stock");
+            reject(event.orderId, record, shopOrderId, "Insufficient stock");
         }
     }
 
-    private boolean canBackorder(List<TiangeJson.FeedLine> lines) {
-        List<SupplierOrderStatus> openStatuses = List.of(
-                SupplierOrderStatus.PENDING, SupplierOrderStatus.ACCEPTED,
-                SupplierOrderStatus.PICKING, SupplierOrderStatus.SHIPPED
-        );
-        for (TiangeJson.FeedLine line : lines) {
-            boolean hasOpenOrder = supplierOrderRepository.findByStatusIn(openStatuses).stream()
-                    .anyMatch(so -> so.getProductId().equals(line.sellerSku));
-            if (!hasOpenOrder) {
-                // No restock coming for this product — trigger one now so we CAN backorder it.
-                String buyerRef = "RO-TG-" + System.currentTimeMillis() + "-" + line.sellerSku;
-                supplierGateway.placeReorder(line.sellerSku, line.qty, buyerRef);
+    private boolean canBackorder(String tiangeOrderId, List<TiangeJson.FeedLine> lines) {
+    List<SupplierOrderStatus> open = List.of(
+            SupplierOrderStatus.PENDING, SupplierOrderStatus.ACCEPTED,
+            SupplierOrderStatus.PICKING, SupplierOrderStatus.SHIPPED);
+
+    for (TiangeJson.FeedLine line : lines) {
+        int stock = inventoryService.getItem(line.sellerSku).getStock();
+        if (stock >= line.qty) {
+            continue; // not short on this line
+        }
+        boolean hasOpenOrder = supplierOrderRepository.findByStatusIn(open).stream()
+                .anyMatch(so -> so.getProductId().equals(line.sellerSku));
+        if (!hasOpenOrder) {
+            try {
+                String buyerRef = "RO-" + tiangeOrderId + "-" + line.sellerSku;
+                supplierGateway.placeReorder(line.sellerSku, Math.max(line.qty - stock, 20), buyerRef);
+            } catch (Exception e) {
+                return false; // can't restock this product, so reject
             }
         }
-        return true; // we've now ensured (or already had) an open supplier order for every line
+    }
+    return true;
+}
+
+    private void reject(String orderId, TiangeOrder record, String shopOrderId, String reason) {
+        record.setDecision("REJECTED");
+        tiangeOrderRepository.save(record);
+        client.decide(orderId, new TiangeJson.DecisionRequest("REJECTED", shopOrderId, reason));
+    }
+
+    private void backorder(String orderId, TiangeOrder record, String shopOrderId) {
+        record.setDecision("BACKORDERED");
+        tiangeOrderRepository.save(record);
+        client.decide(orderId, new TiangeJson.DecisionRequest("BACKORDERED", shopOrderId, "Awaiting supplier delivery"));
     }
 
     private void accept(String orderId, TiangeOrder record, String shopOrderId) {
-        record.setShopOrderId(shopOrderId == null ? null : Long.valueOf(shopOrderId));
-        record.setDecision("ACCEPTED");
-        tiangeOrderRepository.save(record);
+    record.setShopOrderId(shopOrderId == null ? null : Long.valueOf(shopOrderId));
+    record.setDecision("ACCEPTED");
+    tiangeOrderRepository.save(record);
 
-        TiangeJson.DecisionRequest req = new TiangeJson.DecisionRequest("ACCEPTED", shopOrderId, null);
-        client.decide(orderId, req);
-    }
-
-    private void reject(String orderId, TiangeOrder record, String reason) {
-        record.setDecision("REJECTED");
-        tiangeOrderRepository.save(record);
-
-        TiangeJson.DecisionRequest req = new TiangeJson.DecisionRequest("REJECTED", null, reason);
-        client.decide(orderId, req);
-    }
-
-    private void backorder(String orderId, TiangeOrder record) {
-        record.setDecision("BACKORDERED");
-        tiangeOrderRepository.save(record);
-
-        TiangeJson.DecisionRequest req = new TiangeJson.DecisionRequest("BACKORDERED", null, "Awaiting supplier delivery");
-        client.decide(orderId, req);
+    client.decide(orderId, new TiangeJson.DecisionRequest("ACCEPTED", shopOrderId, null));
     }
 
     private String findShopOrderId(OrderResponse response) {

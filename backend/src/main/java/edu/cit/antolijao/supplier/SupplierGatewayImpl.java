@@ -3,6 +3,7 @@ package edu.cit.antolijao.supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -22,7 +23,7 @@ class SupplierGatewayImpl implements SupplierGateway {
     private ProductSupplierMapping productSupplierMapping;
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public SupplierOrderResult placeReorder(String productId, int unitsNeeded, String buyerRef) {
         String requestId = UUID.randomUUID().toString();
 
@@ -37,14 +38,13 @@ class SupplierGatewayImpl implements SupplierGateway {
         ProductSupplierMapping.Mapping mapping = productSupplierMapping.forProduct(productId);
         int cases = (int) Math.ceil((double) unitsNeeded / mapping.packSize());
 
-        // Save initial PENDING entity first to obtain the auto-generated DB primary key (ID)
-        SupplierOrder order = new SupplierOrder(productId, null, requestId, unitsNeeded, SupplierOrderStatus.PENDING);
+        // buyer_ref is NOT NULL + UNIQUE, so the first insert needs a unique temporary value
+        SupplierOrder order = new SupplierOrder(productId, "TMP-" + requestId, requestId, unitsNeeded, SupplierOrderStatus.PENDING);
         order.setCases(cases);
         order = supplierOrderRepository.save(order);
 
-        // Derive deterministic buyerRef from saved primary key if none was provided by caller
         if (buyerRef == null || buyerRef.isBlank()) {
-            buyerRef = String.format("RO-TEST-%03d", order.getId());
+            buyerRef = "RO-L4-" + order.getId();
         }
 
         order.setBuyerRef(buyerRef);
@@ -71,6 +71,7 @@ class SupplierGatewayImpl implements SupplierGateway {
                 return SupplierOrderResult.accepted(ack.poNumber);
 
             } catch (LegacySupplyException e) {
+                System.out.println("LegacySupply call failed: " + e.errorCode + " (HTTP " + e.httpStatus + ")");
                 boolean retryable = e.httpStatus == 503 || e.httpStatus == 429;
                 if (!retryable || attempt >= MAX_ATTEMPTS) {
                     return SupplierOrderResult.pending(

@@ -24,26 +24,36 @@ class TiangeFeedPoller {
     private TiangeOrderDecisionHandler decisionHandler;
 
     @Scheduled(fixedDelay = 5000)
+    @Scheduled(fixedDelay = 5000)
     void pollFeed() {
-        try {
-            long cursor = getCursor();
-            TiangeJson.FeedResponse response = client.getFeed(cursor, 20);
-            System.out.println("Polled feed at cursor=" + cursor + ", nextCursor=" + response.nextCursor + ", got " +
-            (response.events == null ? 0 : response.events.size()) + " event(s)");
+    try {
+        long cursor = getCursor();
+        TiangeJson.FeedResponse response = client.getFeed(cursor, 20);
 
-            if (response.events == null || response.events.isEmpty()) {
-                return;
-            }
+        System.out.println("Polled feed at cursor=" + cursor + ", nextCursor=" + response.nextCursor + ", got " +
+                (response.events == null ? 0 : response.events.size()) + " event(s)");
 
-            for (TiangeJson.FeedEvent event : response.events) {
-                processEvent(event);
-            }
-
-            saveCursor(response.nextCursor);
-
-        } catch (Exception e) {
-            System.out.println("Feed poll failed: " + e.getMessage());
+        if (response.events == null || response.events.isEmpty()) {
+            return;
         }
+
+        boolean allOk = true;
+        for (TiangeJson.FeedEvent event : response.events) {
+            try {
+                processEvent(event);
+            } catch (Exception e) {
+                allOk = false;
+                System.out.println("Event " + event.eventId + " (" + event.orderId + ") failed: " + e.getMessage());
+            }
+        }
+
+        if (allOk) {
+            saveCursor(response.nextCursor);
+        }
+
+    } catch (Exception e) {
+        System.out.println("Feed poll failed: " + e.getMessage());
+    }
     }
 
     private void processEvent(TiangeJson.FeedEvent event) {

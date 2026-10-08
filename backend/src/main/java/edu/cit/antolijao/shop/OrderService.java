@@ -49,7 +49,9 @@ public class OrderService {
                     String outcome = i.getProductId().equals(failingProductId) ? "INSUFFICIENT_STOCK" : "NOT_RESERVED";
                     outcomes.add(new OrderResponse.ItemOutcome(i.getProductId(), name, outcome));
                 }
-                return new OrderResponse("REJECTED", rejectedOrder.getReason(), outcomes);
+            OrderResponse rejected = new OrderResponse("REJECTED", rejectedOrder.getReason(), outcomes);
+            rejected.setOrderId(rejectedOrder.getOrderId());
+            return rejected;
             }
         }
 

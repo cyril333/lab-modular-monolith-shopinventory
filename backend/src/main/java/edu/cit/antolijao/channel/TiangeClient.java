@@ -118,7 +118,7 @@ class TiangeClient {
     private String extractErrorCode(RestClientResponseException e) {
         try {
             TiangeJson.ErrorResponse err = mapper.readValue(e.getResponseBodyAsString(), TiangeJson.ErrorResponse.class);
-            return err.error;
+            return err.error + " - " + err.message;
         } catch (Exception ex) {
             return "unknown";
         }
