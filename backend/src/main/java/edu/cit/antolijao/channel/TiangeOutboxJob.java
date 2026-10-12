@@ -46,9 +46,18 @@ class TiangeOutboxJob {
             allSent = false;
         }
         // 3. stock goes out only if Tiangge has every decision, checked again right before sending
-        if (allSent && orders.findPendingSends().isEmpty()) {
-            stockSync.flushStock();
+        try {
+            stockSync.flushStock(() -> {
+                java.util.Set<String> hold = new java.util.HashSet<>();
+                for (TiangeOrder p : orders.findPendingSends()) {
+                    orderItems.findByTiangeOrderId(p.getTiangeOrderId())
+                        .forEach(i -> hold.add(i.getProductId()));
         }
+            return hold;
+        });
+    } catch (Exception e) {
+        System.out.println("Stock flush skipped: " + e.getMessage());
+    }
     }
 
     private boolean sendPending(TiangeOrder o) {

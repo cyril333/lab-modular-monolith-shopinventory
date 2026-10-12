@@ -32,11 +32,21 @@ class TiangeStockSyncListener {
     }
 
     // Called by the outbox job once Tiangge has every decision. Always sends the current real stock.
-    void flushStock() {
+    void flushStock(java.util.function.Supplier<java.util.Set<String>> holdSupplier) {
         if (dirty.isEmpty()) {
             return;
         }
-        List<String> batch = new ArrayList<>(dirty);
+        List<String> snapshot = new ArrayList<>(dirty);
+        java.util.Set<String> hold = holdSupplier.get();
+        List<String> batch = new ArrayList<>();
+        for (String p : snapshot) {
+            if (!hold.contains(p)) {
+                batch.add(p);
+            }
+        }
+        if (batch.isEmpty()) {
+            return;
+        }
         dirty.removeAll(batch);
         try {
             List<TiangeJson.StockUpdate> updates = new ArrayList<>();
