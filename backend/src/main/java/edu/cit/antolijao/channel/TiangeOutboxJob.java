@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 
 @Component
 class TiangeOutboxJob {
-
+    @Autowired private TiangeOrderItemRepository orderItems;
     @Autowired private TiangeOrderRepository orders;
     @Autowired private TiangeClient client;
     @Autowired private TiangeStockSyncListener stockSync;
@@ -66,6 +66,8 @@ class TiangeOutboxJob {
                 boolean restocked = o.getShopOrderId() != null && "ACCEPTED".equals(o.getDecision());
                 client.confirmCancellation(id, new TiangeJson.CancellationConfirmRequest(restocked));
                 orders.markCancelConfirmed(id);
+                stockSync.markDirty(orderItems.findByTiangeOrderId(id).stream()
+                .map(TiangeOrderItem::getProductId).toList());
             }
             return true;
         } catch (TiangeException e) {

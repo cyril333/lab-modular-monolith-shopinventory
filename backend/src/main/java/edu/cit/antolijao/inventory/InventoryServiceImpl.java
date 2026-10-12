@@ -1,7 +1,11 @@
 package edu.cit.antolijao.inventory;
 
+import java.util.List;
+
 import edu.cit.antolijao.supplier.SupplierGateway;
 import edu.cit.antolijao.supplier.SupplierOrderResult;
+import edu.cit.antolijao.supplier.SupplierOrderStatus;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -70,13 +74,17 @@ class InventoryServiceImpl implements InventoryService {
 
     private void triggerAutoReorder(String productId) {
     try {
-        long sequence = supplierOrderRepository.count() + 1;
-        String buyerRef = "RO-" + sequence;
+        boolean alreadyComing = supplierOrderRepository
+                .findByStatusIn(List.of(SupplierOrderStatus.PENDING, SupplierOrderStatus.ACCEPTED,
+                        SupplierOrderStatus.PICKING, SupplierOrderStatus.SHIPPED))
+                .stream().anyMatch(so -> so.getProductId().equals(productId));
+        if (alreadyComing) {
+            return;
+        }
+        String buyerRef = "RO-" + productId + "-" + System.currentTimeMillis();
         supplierGateway.queueReorder(productId, REORDER_QUANTITY, buyerRef);
-        // Result is intentionally not surfaced here — SupplierOrder table + notifications
-        // (added in Part E) are the system of record for what happened.
     } catch (Exception e) {
         System.out.println("Auto-reorder failed, retry job will cover it: " + e.getMessage());
     }
-}
+    }
 }

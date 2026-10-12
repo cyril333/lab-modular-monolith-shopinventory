@@ -49,4 +49,8 @@ class TiangeStockSyncListener {
             System.out.println("Stock sync failed, will retry: " + e.getMessage());
         }
     }
+
+    void markDirty(java.util.Collection<String> productIds) {
+        dirty.addAll(productIds);
+    }
 }
