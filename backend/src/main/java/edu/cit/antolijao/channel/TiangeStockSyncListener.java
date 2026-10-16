@@ -36,23 +36,23 @@ class TiangeStockSyncListener {
         if (dirty.isEmpty()) {
             return;
         }
-        List<String> snapshot = new ArrayList<>(dirty);
-        java.util.Set<String> hold = holdSupplier.get();
         List<String> batch = new ArrayList<>();
-        for (String p : snapshot) {
-            if (!hold.contains(p)) {
-                batch.add(p);
+        List<TiangeJson.StockUpdate> updates = new ArrayList<>();
+        synchronized (TiangeOrderDecisionHandler.LOCK) {
+            List<String> snapshot = new ArrayList<>(dirty);
+            java.util.Set<String> hold = holdSupplier.get();
+            for (String p : snapshot) {
+                if (!hold.contains(p)) {
+                    batch.add(p);
+                    updates.add(new TiangeJson.StockUpdate(p, inventoryService.getItem(p).getStock()));
+                }
             }
+            dirty.removeAll(batch);
         }
         if (batch.isEmpty()) {
             return;
         }
-        dirty.removeAll(batch);
         try {
-            List<TiangeJson.StockUpdate> updates = new ArrayList<>();
-            for (String productId : batch) {
-                updates.add(new TiangeJson.StockUpdate(productId, inventoryService.getItem(productId).getStock()));
-            }
             client.publishStock(updates);
         } catch (Exception e) {
             dirty.addAll(batch);

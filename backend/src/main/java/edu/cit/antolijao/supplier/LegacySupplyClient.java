@@ -48,6 +48,7 @@ class LegacySupplyClient {
         String responseBody = restClient.post()
                 .uri(config.baseUrl + "/auth/token")
                 .contentType(org.springframework.http.MediaType.APPLICATION_XML)
+                .header("X-Client-Instance", instance.getInstanceId())
                 .body(body)
                 .retrieve()
                 .body(String.class);
