@@ -20,7 +20,7 @@ class SupplierOrderPoller {
         this.publisher = publisher;
     }
 
-    @Scheduled(fixedDelay = 45000) // every 45s, stays under quota
+    @Scheduled(fixedDelay = 8000) // every 45s, stays under quota
     void pollOpenOrders() {
         List<SupplierOrder> open = repository.findByStatusIn(
                 List.of(SupplierOrderStatus.ACCEPTED,
