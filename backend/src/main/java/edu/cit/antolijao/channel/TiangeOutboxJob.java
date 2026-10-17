@@ -1,9 +1,17 @@
 package edu.cit.antolijao.channel;
 
+import edu.cit.antolijao.inventory.InventoryService;
+import edu.cit.antolijao.supplier.SupplierOrderRepository;
+import edu.cit.antolijao.supplier.SupplierOrderStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -14,20 +22,17 @@ class TiangeOutboxJob {
     @Autowired private TiangeClient client;
     @Autowired private TiangeStockSyncListener stockSync;
     @Autowired private TiangeOrderDecisionHandler decisionHandler;
+    @Autowired private InventoryService inventoryService;
+    @Autowired private SupplierOrderRepository supplierOrders;
 
     private long lastBackorderSweep = 0;
 
     @Scheduled(fixedDelay = 2000)
     void run() {
-        boolean allSent = true;
         try {
-            // 1. deadline-critical: tell Tiangge every decision first
             for (TiangeOrder o : orders.findPendingSends()) {
-                if (!sendPending(o)) {
-                    allSent = false;
-                }
+                sendPending(o);
             }
-            // 2. backorder sweep, at most every 10s (deliveries also resolve backorders via the resolver)
             long now = System.currentTimeMillis();
             if (now - lastBackorderSweep >= 10_000) {
                 lastBackorderSweep = now;
@@ -43,27 +48,31 @@ class TiangeOutboxJob {
             }
         } catch (Exception e) {
             System.out.println("Outbox run failed: " + e.getMessage());
-            allSent = false;
         }
-        // 3. stock goes out only if Tiangge has every decision, checked again right before sending
         try {
             stockSync.flushStock(() -> {
-                java.util.Set<String> hold = new java.util.HashSet<>();
+                Set<String> hold = new HashSet<>();
                 for (TiangeOrder p : orders.findPendingSends()) {
-                    orderItems.findByTiangeOrderId(p.getTiangeOrderId())
-                        .forEach(i -> hold.add(i.getProductId()));
+                    // only an accepted order or a cancellation changes the stock Tiangge expects
+                    if ("ACCEPTED".equals(p.getDecision()) || p.isCancelRequested()) {
+                        orderItems.findByTiangeOrderId(p.getTiangeOrderId())
+                                .forEach(i -> hold.add(i.getProductId()));
+                    }
+                }
+                return hold;
+            });
+        } catch (Exception e) {
+            System.out.println("Stock flush skipped: " + e.getMessage());
         }
-            return hold;
-        });
-    } catch (Exception e) {
-        System.out.println("Stock flush skipped: " + e.getMessage());
-    }
     }
 
     private boolean sendPending(TiangeOrder o) {
         String id = o.getTiangeOrderId();
         try {
             if (!o.isDecisionSent()) {
+                if (!readyToDecide(o)) {
+                    return true; // checked again next cycle
+                }
                 sendDecision(o);
                 orders.markDecisionSent(id);
             }
@@ -76,7 +85,7 @@ class TiangeOutboxJob {
                 client.confirmCancellation(id, new TiangeJson.CancellationConfirmRequest(restocked));
                 orders.markCancelConfirmed(id);
                 stockSync.markDirty(orderItems.findByTiangeOrderId(id).stream()
-                .map(TiangeOrderItem::getProductId).toList());
+                        .map(TiangeOrderItem::getProductId).toList());
             }
             return true;
         } catch (TiangeException e) {
@@ -91,6 +100,38 @@ class TiangeOutboxJob {
             System.out.println("Will retry " + id + ": " + e.getMessage());
             return false;
         }
+    }
+
+    /** A backorder may only be announced once every short item has a purchase order LegacySupply really holds. */
+    private boolean readyToDecide(TiangeOrder o) {
+        if (!"BACKORDERED".equals(o.getDecision())) {
+            return true;
+        }
+        List<TiangeOrderItem> lines = orderItems.findByTiangeOrderId(o.getTiangeOrderId());
+        List<String> shortProducts = new ArrayList<>();
+        for (TiangeOrderItem l : lines) {
+            if (inventoryService.getItem(l.getProductId()).getStock() < l.getQty()) {
+                shortProducts.add(l.getProductId());
+            }
+        }
+        if (shortProducts.isEmpty()) {
+            return false; // stock arrived meanwhile; the sweep accepts the order instead
+        }
+        List<SupplierOrderStatus> placed = List.of(
+                SupplierOrderStatus.ACCEPTED, SupplierOrderStatus.PICKING, SupplierOrderStatus.SHIPPED);
+        var held = supplierOrders.findByStatusIn(placed);
+        boolean covered = shortProducts.stream()
+                .allMatch(p -> held.stream().anyMatch(so -> so.getProductId().equals(p)));
+        if (covered) {
+            return true;
+        }
+        OffsetDateTime created = o.getCreatedAt();
+        if (created != null && created.isBefore(OffsetDateTime.now().minusSeconds(40))) {
+            o.setDecision("REJECTED"); // restock not placed in time: answer before the deadline
+            orders.save(o);
+            return true;
+        }
+        return false;
     }
 
     private void sendDecision(TiangeOrder o) {

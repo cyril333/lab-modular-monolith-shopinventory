@@ -128,14 +128,28 @@ class TiangeOrderDecisionHandler {
         }
 
         boolean stillComing = shortProducts.stream().anyMatch(this::hasOpenSupplierOrder);
-        if (!stillComing && allowCancel) {
-            o.setDecision("CANCELLED");
-            if (o.isDecisionSent()) {
-                o.setResolution("CANCELLED");
+            if (!stillComing && allowCancel) {
+                o.setDecision("CANCELLED");
+                if (o.isDecisionSent()) {
+                    o.setResolution("CANCELLED");
+                }
+                tiangeOrderRepository.save(o);
+                return;
             }
-            tiangeOrderRepository.save(o);
+            if (!allowCancel) {
+                for (TiangeOrderItem l : lines) {
+                    if (shortProducts.contains(l.getProductId()) && !hasOpenSupplierOrder(l.getProductId())) {
+                        try {
+                            int deficit = l.getQty() - inventoryService.getItem(l.getProductId()).getStock();
+                            supplierGateway.queueReorder(l.getProductId(), Math.max(deficit, 20),
+                                    "RO-" + tiangeOrderId + "-" + l.getProductId() + "-" + System.currentTimeMillis());
+                        } catch (Exception e) {
+                            System.out.println("Re-queue reorder failed for " + l.getProductId() + ": " + e.getMessage());
+                        }
+                    }
+                }
+            }
         }
-    }
 
     private boolean canBackorder(String tiangeOrderId, List<TiangeJson.FeedLine> lines) {
         boolean anyShort = false;
